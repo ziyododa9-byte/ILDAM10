@@ -1,60 +1,116 @@
 import os
 import logging
+import tempfile
+import base64
+import httpx
+from anthropic import Anthropic
+from openai import OpenAI
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder, MessageHandler, CommandHandler,
-    ContextTypes, filters
-)
-from handlers.text_handler import handle_text
-from handlers.voice_handler import handle_voice
-from handlers.photo_handler import handle_photo
-from handlers.document_handler import handle_document
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 
+anthropic = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 
+history = {}
+SYSTEM = "Siz professional biznes yordamchisisiz. Foydalanuvchi qaysi tilda yozsa, o'sha tilda javob bering. O'zbek yoki rus tilida muloqot qiling."
+
+def get_history(uid): return history.get(uid, [])
+def add_history(uid, role, content):
+    if uid not in history: history[uid] = []
+    history[uid].append({"role": role, "content": content})
+    if len(history[uid]) > 20: history[uid] = history[uid][-20:]
+
+def ask_claude(uid, content):
+    add_history(uid, "user", content)
+    r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
+    answer = r.content[0].text
+    add_history(uid, "assistant", answer)
+    return answer
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    name = update.effective_user.first_name or "Salom"
-    await update.message.reply_text(
-        f"Salom, {name}! Men sizning AI yordamchingizman.\n\n"
-        f"Привет, {name}! Я ваш AI ассистент.\n\n"
-        f"Menga yozishingiz, ovoz yuborishingiz, rasm yoki PDF fayl yuborishingiz mumkin."
-    )
+    await update.message.reply_text(f"Salom! Men sizning AI yordamchingizman. Yozing, ovoz yuboring yoki rasm/PDF yuboring!")
 
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    try:
+        answer = ask_claude(update.effective_user.id, update.message.text)
+        await update.message.reply_text(answer)
+    except Exception as e:
+        await update.message.reply_text("Xatolik yuz berdi.")
+        print(e)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Nima qila olaman:\n"
-        "• Matn — istalgan savolga javob beraman\n"
-        "• Ovoz — ovoz xabaringizni tinglab javob beraman\n"
-        "• Rasm — rasmni tahlil qilaman\n"
-        "• PDF/hujjat — faylni o'qib javob beraman\n\n"
-        "Что я умею:\n"
-        "• Текст — отвечу на любой вопрос\n"
-        "• Голос — пойму голосовое сообщение\n"
-        "• Фото — проанализирую изображение\n"
-        "• PDF/документ — прочитаю и отвечу"
-    )
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    try:
+        file = await context.bot.get_file(update.message.voice.file_id)
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+            tmp_path = tmp.name
+        await file.download_to_drive(tmp_path)
+        with open(tmp_path, "rb") as audio:
+            transcript = openai_client.audio.transcriptions.create(model="whisper-1", file=audio)
+        os.unlink(tmp_path)
+        text = transcript.text
+        if not text.strip():
+            await update.message.reply_text("Ovozni aniqlay olmadim.")
+            return
+        await update.message.reply_text(f'Tingladim: "{text}"')
+        await update.message.reply_text(ask_claude(update.effective_user.id, text))
+    except Exception as e:
+        await update.message.reply_text("Ovozni qayta ishlashda xatolik.")
+        print(e)
 
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    try:
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        img = base64.standard_b64encode(httpx.get(file.file_path).content).decode()
+        caption = update.message.caption or "Bu rasmni tahlil qil."
+        uid = update.effective_user.id
+        content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}}, {"type": "text", "text": caption}]
+        add_history(uid, "user", content)
+        r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
+        answer = r.content[0].text
+        add_history(uid, "assistant", answer)
+        await update.message.reply_text(answer)
+    except Exception as e:
+        await update.message.reply_text("Rasmni qayta ishlashda xatolik.")
+        print(e)
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    try:
+        doc = update.message.document
+        if doc.file_size > 10 * 1024 * 1024:
+            await update.message.reply_text("Fayl juda katta. 10MB dan kichik fayl yuboring.")
+            return
+        file = await context.bot.get_file(doc.file_id)
+        data = httpx.get(file.file_path).content
+        caption = update.message.caption or "Bu hujjatni o'qib, asosiy ma'lumotlarni ayt."
+        uid = update.effective_user.id
+        mime = doc.mime_type or ""
+        if "pdf" in mime:
+            content = [{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": base64.standard_b64encode(data).decode()}}, {"type": "text", "text": caption}]
+            add_history(uid, "user", content)
+            r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=2000, system=SYSTEM, messages=get_history(uid))
+            answer = r.content[0].text
+            add_history(uid, "assistant", answer)
+        else:
+            text = data.decode("utf-8", errors="ignore")[:8000]
+            answer = ask_claude(uid, f"{caption}\n\n{text}")
+        await update.message.reply_text(answer)
+    except Exception as e:
+        await update.message.reply_text("Hujjatni qayta ishlashda xatolik.")
+        print(e)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-
-    print("Bot ishga tushdi...")
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+print("Bot ishga tushdi!")
+app.run_polling()
