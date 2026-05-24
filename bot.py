@@ -25,7 +25,7 @@ def add_history(uid, role, content):
 
 def ask_claude(uid, content):
     add_history(uid, "user", content)
-    r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
+    r = anthropic.messages.create(model="claude-sonnet-4-5-20251001", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
     answer = r.content[0].text
     add_history(uid, "assistant", answer)
     return answer
@@ -72,7 +72,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = update.effective_user.id
         content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}}, {"type": "text", "text": caption}]
         add_history(uid, "user", content)
-        r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
+        r = anthropic.messages.create(model="claude-sonnet-4-5-20251001", max_tokens=1500, system=SYSTEM, messages=get_history(uid))
         answer = r.content[0].text
         add_history(uid, "assistant", answer)
         await update.message.reply_text(answer)
@@ -95,7 +95,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "pdf" in mime:
             content = [{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": base64.standard_b64encode(data).decode()}}, {"type": "text", "text": caption}]
             add_history(uid, "user", content)
-            r = anthropic.messages.create(model="claude-sonnet-4-20250514", max_tokens=2000, system=SYSTEM, messages=get_history(uid))
+            r = anthropic.messages.create(model="claude-sonnet-4-5-20251001", max_tokens=2000, system=SYSTEM, messages=get_history(uid))
             answer = r.content[0].text
             add_history(uid, "assistant", answer)
         else:
