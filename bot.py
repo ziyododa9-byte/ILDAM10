@@ -108,12 +108,33 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text("Hujjatni qayta ishlashda xatolik.")
         print(e)
-
+async def handle_image_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+    prompt = " ".join(context.args) if context.args else None
+    if not prompt:
+        await update.message.reply_text(
+            "Rasm uchun tavsif yozing:\n/rasm tog'da qor yog'ayotgan manzara\n\n"
+            "Для генерации напишите:\n/rasm красивый закат над морем"
+        )
+        return
+    try:
+        await update.message.reply_text("Rasm tayyorlanmoqda... 🎨")
+        response = openai_client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        image_url = response.data[0].url
+        await update.message.reply_photo(photo=image_url, caption=f"🎨 {prompt}")
+    except Exception as e:
+        await update.message.reply_text("Rasm yaratishda xatolik yuz berdi.")
+        print(f"Image gen error: {e}")
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+app.add_handler(CommandHandler("rasm", handle_image_gen))
 print("Bot ishga tushdi!")
 app.run_polling()
