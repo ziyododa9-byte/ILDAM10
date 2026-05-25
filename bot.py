@@ -15,11 +15,10 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 
 history = {}
-SYSTEM = "Siz professional biznes yordamchisisiz. 
-MUHIM: Faqat O'ZBEK yoki RUS tilida javob bering.
-Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering.
-Qisqa, aniq va foydali javoblar bering.
-SYSTEM ="Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
+SYSTEM = """Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
+
+
+
 
 def get_history(uid): return history.get(uid, [])
 def add_history(uid, role, content):
