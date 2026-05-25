@@ -115,13 +115,14 @@ async def handle_image_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text("Rasm tayyorlanmoqda...")
         response = openai_client.images.generate(
-            model="dall-e-2",
+            model="gpt-image-1",
             prompt=prompt,
-            size="512x512",
+            size="1024x1024",
             n=1,
         )
-        image_url = response.data[0].url
-        await update.message.reply_photo(photo=image_url, caption=f"{prompt}")
+        image_data = response.data[0].b64_json
+        image_bytes = base64.b64decode(image_data)
+        await update.message.reply_photo(photo=image_bytes, caption=f"{prompt}")
     except Exception as e:
         await update.message.reply_text("Rasm yaratishda xatolik yuz berdi.")
         print(f"Image gen error: {e}")
