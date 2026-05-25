@@ -120,8 +120,7 @@ async def handle_image_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text("Rasm tayyorlanmoqda... 🎨")
         response = openai_client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
+            model="dall-e-2",
             size="1024x1024",
             quality="standard",
             n=1,
