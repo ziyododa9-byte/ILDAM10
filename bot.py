@@ -17,9 +17,6 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 history = {}
 SYSTEM = """Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
 
-
-
-
 def get_history(uid): return history.get(uid, [])
 def add_history(uid, role, content):
     if uid not in history: history[uid] = []
@@ -34,7 +31,7 @@ def ask_claude(uid, content):
     return answer
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"Salom! Men sizning AI yordamchingizman. Yozing, ovoz yuboring yoki rasm/PDF yuboring!")
+    await update.message.reply_text("Salom! Men sizning AI yordamchingizman.\n\nYozing, ovoz yuboring, rasm yoki PDF yuboring!\n\nRasm yaratish uchun: /rasm [tavsif]")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -108,32 +105,33 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text("Hujjatni qayta ishlashda xatolik.")
         print(e)
+
 async def handle_image_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
     prompt = " ".join(context.args) if context.args else None
     if not prompt:
-        await update.message.reply_text(
-            "Rasm uchun tavsif yozing:\n/rasm tog'da qor yog'ayotgan manzara\n\n"
-            "Для генерации напишите:\n/rasm красивый закат над морем"
-        )
+        await update.message.reply_text("Rasm uchun tavsif yozing:\n/rasm tog'da qor yog'ayotgan manzara")
         return
     try:
-        await update.message.reply_text("Rasm tayyorlanmoqda... 🎨")
+        await update.message.reply_text("Rasm tayyorlanmoqda...")
         response = openai_client.images.generate(
             model="dall-e-2",
-            size="1024x1024",
-            quality="standard",
+            prompt=prompt,
+            size="512x512",
             n=1,
         )
         image_url = response.data[0].url
-        await update.message.reply_photo(photo=image_url, caption=f"🎨 {prompt}")
+        await update.message.reply_photo(photo=image_url, caption=f"{prompt}")
     except Exception as e:
         await update.message.reply_text("Rasm yaratishda xatolik yuz berdi.")
         print(f"Image gen error: {e}")
+
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("rasm", handle_image_gen))
 app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-app.add_handler(CommandHandler("rasm", handle_image_gen))
+app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 print("Bot ishga tushdi!")
 app.run_polling()
