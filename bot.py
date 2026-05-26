@@ -134,40 +134,48 @@ async def handle_video_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Video uchun tavsif yozing:\n/video tog'da qor yog'ayotgan manzara")
         return
     try:
-        await update.message.reply_text("Video tayyorlanmoqda... Bu 1-2 daqiqa olishi mumkin 🎬")
-        import requests
+        await update.message.reply_text("Video tayyorlanmoqda... 1-2 daqiqa kuting 🎬")
+        import asyncio
+        import aiohttp
         headers = {
             "Authorization": f"Bearer {os.environ['BYTEPLUS_API_KEY']}",
             "Content-Type": "application/json"
         }
-        # Video generatsiya so'rovi
         data = {
             "model": "seedance-1-0-lite-t2v-250528",
             "content": [{"type": "text", "text": prompt}]
         }
-        r = requests.post("https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks", json=data, headers=headers)
-        task = r.json()
-        task_id = task.get("id")
-        if not task_id:
-            await update.message.reply_text("Video yaratishda xatolik.")
-            return
-        # Natijani kutish
-        import time
-        for _ in range(30):
-            time.sleep(5)
-            r2 = requests.get(f"https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/{task_id}", headers=headers)
-            result = r2.json()
-            status = result.get("status")
-            if status == "succeeded":
-                video_url = result["content"][0]["video_url"]
-                video_data = requests.get(video_url).content
-                await update.message.reply_video(video=video_data, caption=f"🎬 {prompt}")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+                json=data, headers=headers
+            ) as r:
+                task = await r.json()
+            task_id = task.get("id")
+            if not task_id:
+                await update.message.reply_text(f"Xatolik: {task}")
                 return
-            elif status == "failed":
-                await update.message.reply_text("Video yaratishda xatolik yuz berdi.")
-                return
+            for _ in range(30):
+                await asyncio.sleep(5)
+                async with session.get(
+                    f"https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/{task_id}",
+                    headers=headers
+                ) as r2:
+                    result = await r2.json()
+                status = result.get("status")
+                if status == "succeeded":
+                    video_url = result["content"][0]["video_url"]
+                    async with session.get(video_url) as vr:
+                        video_data = await vr.read()
+                    await update.message.reply_video(video=video_data, caption=f"🎬 {prompt}")
+                    return
+                elif status == "failed":
+                    await update.message.reply_text("Video yaratishda xatolik yuz berdi.")
+                    return
         await update.message.reply_text("Video tayyorlanmadi. Qayta urinib ko'ring.")
     except Exception as e:
+        await update.message.reply_text("Video yaratishda xatolik.")
+        print(f"Video gen error: {e}")
         await update.message.reply_text("Video yaratishda xatolik.")
         print(f"Video gen error: {e}")
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
