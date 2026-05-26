@@ -127,9 +127,53 @@ async def handle_image_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Rasm yaratishda xatolik yuz berdi.")
         print(f"Image gen error: {e}")
 
+async def handle_video_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_video")
+    prompt = " ".join(context.args) if context.args else None
+    if not prompt:
+        await update.message.reply_text("Video uchun tavsif yozing:\n/video tog'da qor yog'ayotgan manzara")
+        return
+    try:
+        await update.message.reply_text("Video tayyorlanmoqda... Bu 1-2 daqiqa olishi mumkin 🎬")
+        import requests
+        headers = {
+            "Authorization": f"Bearer {os.environ['BYTEPLUS_API_KEY']}",
+            "Content-Type": "application/json"
+        }
+        # Video generatsiya so'rovi
+        data = {
+            "model": "seedance-1-0-lite-t2v-250528",
+            "content": [{"type": "text", "text": prompt}]
+        }
+        r = requests.post("https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks", json=data, headers=headers)
+        task = r.json()
+        task_id = task.get("id")
+        if not task_id:
+            await update.message.reply_text("Video yaratishda xatolik.")
+            return
+        # Natijani kutish
+        import time
+        for _ in range(30):
+            time.sleep(5)
+            r2 = requests.get(f"https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks/{task_id}", headers=headers)
+            result = r2.json()
+            status = result.get("status")
+            if status == "succeeded":
+                video_url = result["content"][0]["video_url"]
+                video_data = requests.get(video_url).content
+                await update.message.reply_video(video=video_data, caption=f"🎬 {prompt}")
+                return
+            elif status == "failed":
+                await update.message.reply_text("Video yaratishda xatolik yuz berdi.")
+                return
+        await update.message.reply_text("Video tayyorlanmadi. Qayta urinib ko'ring.")
+    except Exception as e:
+        await update.message.reply_text("Video yaratishda xatolik.")
+        print(f"Video gen error: {e}")
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("rasm", handle_image_gen))
+app.add_handler(CommandHandler("video", handle_video_gen))
 app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
