@@ -1,4 +1,6 @@
 import os
+import asyncio
+import aiohttp
 import logging
 import tempfile
 import base64
@@ -19,7 +21,7 @@ SHEETS_URL = os.environ.get("SHEETS_WEBHOOK_URL", "")
 SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN", "")
 
 history = {}
-SYSTEM = """Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
+SYSTEM = """Siz Promotion_video studiyasining AI yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Qisqa, aniq va foydali javoblar bering."""
 
 def get_history(uid): return history.get(uid, [])
 
@@ -52,13 +54,12 @@ def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
         return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salom! Men sizning AI yordamchingizman.\n\nYozing, ovoz yuboring, rasm yoki PDF yuboring!\n\nRasm yaratish uchun: /rasm [tavsif]")
+    await update.message.reply_text("Salom! Men Promotion_video studiyasining AI yordamchisiman.\n\nSavol yozing, ovoz yuboring, rasm yoki PDF yuboring!\n\nRasm yaratish: /rasm [tavsif]\nVideo yaratish: /video [tavsif]")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text.strip()
 
-    # Agar ism yoki telefon kutilayotgan bo'lsa
     if user_state.get(uid) in ("wait_name", "wait_phone"):
         await handle_text_lead(update, context)
         return
@@ -166,8 +167,6 @@ async def handle_video_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         await update.message.reply_text("Video tayyorlanmoqda... 1-2 daqiqa kuting 🎬")
-        import asyncio
-        import aiohttp
         headers = {
             "Authorization": f"Bearer {os.environ['BYTEPLUS_API_KEY']}",
             "Content-Type": "application/json"
