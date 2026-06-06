@@ -40,8 +40,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
         answer = ask_claude(update.effective_user.id, update.message.text)
+       start_lead(update.effective_user.id, savol=update.message.text)
         await update.message.reply_text(answer)
-    except Exception as e:
+    start_lead(update.effective_user.id, savol=update.message.text)
+        await update.message.reply_text("Shaxsiy taklif uchun ismingizni yozing 👇")
+except Exception as e:
         await update.message.reply_text("Xatolik yuz berdi.")
         print(e)
 
