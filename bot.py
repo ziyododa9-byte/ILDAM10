@@ -3,6 +3,8 @@ import logging
 import tempfile
 import base64
 import httpx
+import httpx
+import requests
 from anthropic import Anthropic
 from openai import OpenAI
 from telegram import Update
@@ -13,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 anthropic = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-
+SHEETS_URL = os.environ.get("SHEETS_WEBHOOK_URL", "")
+SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN", "")
 history = {}
 SYSTEM = """Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
 
@@ -188,3 +191,18 @@ app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 print("Bot ishga tushdi!")
 app.run_polling()
+def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
+    try:
+        resp = requests.post(SHEETS_URL, json={
+            "token": SHEETS_TOKEN,
+            "ism": ism,
+            "telefon": telefon,
+            "manba": manba,
+            "savol": savol,
+        }, timeout=10)
+        result = resp.json()
+        print("Sheets natija:", result)
+        return result.get("status") == "ok"
+    except Exception as e:
+        print("Sheets xatosi:", e)
+        return False
