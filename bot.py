@@ -9,7 +9,7 @@ from anthropic import Anthropic
 from openai import OpenAI
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
-
+from lead_handler import handle_text_lead, handle_contact, start_lead
 logging.basicConfig(level=logging.INFO)
 
 anthropic = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -189,6 +189,7 @@ app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
 print("Bot ishga tushdi!")
 app.run_polling()
 def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
