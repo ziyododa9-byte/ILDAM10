@@ -1,8 +1,29 @@
+import os
+import requests
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import ContextTypes, MessageHandler, filters
+from telegram.ext import ContextTypes
 
 user_state = {}
 user_leads = {}
+
+SHEETS_URL = os.environ.get("SHEETS_WEBHOOK_URL", "")
+SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN", "")
+
+def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
+    try:
+        resp = requests.post(SHEETS_URL, json={
+            "token": SHEETS_TOKEN,
+            "ism": ism,
+            "telefon": telefon,
+            "manba": manba,
+            "savol": savol,
+        }, timeout=10)
+        result = resp.json()
+        print("Sheets natija:", result)
+        return result.get("status") == "ok"
+    except Exception as e:
+        print("Sheets xatosi:", e)
+        return False
 
 async def handle_text_lead(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -22,11 +43,10 @@ async def handle_text_lead(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 one_time_keyboard=True
             )
         )
-        return
+        return True
     return False
 
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from bot import save_to_sheets
     uid = update.effective_user.id
     contact = update.message.contact
     telefon = contact.phone_number
