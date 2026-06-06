@@ -3,13 +3,13 @@ import logging
 import tempfile
 import base64
 import httpx
-import httpx
 import requests
 from anthropic import Anthropic
 from openai import OpenAI
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
-from lead_handler import handle_text_lead, handle_contact, start_lead
+from lead_handler import handle_text_lead, handle_contact, start_lead, user_state
+
 logging.basicConfig(level=logging.INFO)
 
 anthropic = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -17,10 +17,12 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 SHEETS_URL = os.environ.get("SHEETS_WEBHOOK_URL", "")
 SHEETS_TOKEN = os.environ.get("SHEETS_TOKEN", "")
+
 history = {}
 SYSTEM = """Siz professional biznes yordamchisisiz. Faqat O'ZBEK yoki RUS tilida javob bering. Agar foydalanuvchi boshqa tilda yozsa ham, javobni O'ZBEK tilida bering. Qisqa, aniq va foydali javoblar bering."""
 
 def get_history(uid): return history.get(uid, [])
+
 def add_history(uid, role, content):
     if uid not in history: history[uid] = []
     history[uid].append({"role": role, "content": content})
@@ -33,16 +35,39 @@ def ask_claude(uid, content):
     add_history(uid, "assistant", answer)
     return answer
 
+def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
+    try:
+        resp = requests.post(SHEETS_URL, json={
+            "token": SHEETS_TOKEN,
+            "ism": ism,
+            "telefon": telefon,
+            "manba": manba,
+            "savol": savol,
+        }, timeout=10)
+        result = resp.json()
+        print("Sheets natija:", result)
+        return result.get("status") == "ok"
+    except Exception as e:
+        print("Sheets xatosi:", e)
+        return False
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Men sizning AI yordamchingizman.\n\nYozing, ovoz yuboring, rasm yoki PDF yuboring!\n\nRasm yaratish uchun: /rasm [tavsif]")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    text = update.message.text.strip()
+
+    # Agar ism yoki telefon kutilayotgan bo'lsa
+    if user_state.get(uid) in ("wait_name", "wait_phone"):
+        await handle_text_lead(update, context)
+        return
+
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     try:
-        answer = ask_claude(update.effective_user.id, update.message.text)
-      
+        answer = ask_claude(uid, text)
         await update.message.reply_text(answer)
-        start_lead(update.effective_user.id, savol=update.message.text)
+        start_lead(uid, savol=text)
         await update.message.reply_text("Shaxsiy taklif uchun ismingizni yozing 👇")
     except Exception as e:
         await update.message.reply_text("Xatolik yuz berdi.")
@@ -182,8 +207,7 @@ async def handle_video_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text("Video yaratishda xatolik.")
         print(f"Video gen error: {e}")
-        await update.message.reply_text("Video yaratishda xatolik.")
-        print(f"Video gen error: {e}")
+
 app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("rasm", handle_image_gen))
@@ -191,22 +215,7 @@ app.add_handler(CommandHandler("video", handle_video_gen))
 app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 print("Bot ishga tushdi!")
 app.run_polling()
-def save_to_sheets(ism, telefon, manba="Telegram", savol=""):
-    try:
-        resp = requests.post(SHEETS_URL, json={
-            "token": SHEETS_TOKEN,
-            "ism": ism,
-            "telefon": telefon,
-            "manba": manba,
-            "savol": savol,
-        }, timeout=10)
-        result = resp.json()
-        print("Sheets natija:", result)
-        return result.get("status") == "ok"
-    except Exception as e:
-        print("Sheets xatosi:", e)
-        return False
